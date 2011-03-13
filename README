@@ -1,0 +1,27 @@
+zerolog - Exposes named pipes as pubsub topics
+
+This software is a proof-of-concept for a network logging daemon. It allows 
+to expose local named pipes on the system as PUB-SUB endpoints. 
+
+Clients can 'listen' different pipes by subscribing to relevant topics, 
+for example :
+
+ZMQ_SUBSCRIBE, "/tmp/mydaemon.log|"
+
+zerolog itself takes the following options:
+
+ -b Bind the socket (for example: tcp://*:5656)
+ -p Pipe to listen to 
+
+Both options can be specified multiple times:
+
+./zerolog -p /tmp/test.pipe -p /tmp/daemon.log -b tcp://*:5656
+
+
+
+TODO:
+
+ - Allow specifying directory and listen to all pipes in the dir
+ - Files (?)
+
+
