@@ -37,6 +37,8 @@
 #  define BUFFER_SIZE 4096
 #endif
 
+#define ALLOC_PIPES 20
+
 int main (int argc, char *argv []) 
 {
     // parse args
@@ -44,7 +46,7 @@ int main (int argc, char *argv [])
     int c;
     size_t p = 0;
 
-    zerolog::pipe_t *pipes[10];
+    zerolog::pipe_t *pipes[ALLOC_PIPES];
 
     zmq::context_t context (1);
     zmq::socket_t socket (context, ZMQ_PUB);
@@ -60,6 +62,10 @@ int main (int argc, char *argv [])
 
             case 'p':
                 std::string a = optarg;
+                if (p >= ALLOC_PIPES) {
+                    std::cerr << "Maximum number of pipes reached. Will fix this one day" << std::endl;
+                    return 1;
+                }
                 pipes[p++] = new zerolog::pipe_t (a, 0755);
                 break;
         }
@@ -111,6 +117,9 @@ int main (int argc, char *argv [])
                 std::cerr << "Error: " << zmq_strerror (errno) << std::endl;
             }
         }
+    }
+    for (size_t i = 0; i < p; i++) {
+        delete pipes[p];
     }
     delete[] items;
     return 0;
