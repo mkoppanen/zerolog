@@ -39,6 +39,10 @@
 #include <zmq.hpp>
 #include <limits.h>
 
+#ifndef DEFAULT_DSN
+# define DEFAULT_DSN "tcp://127.0.0.1:5656"
+#endif
+
 namespace fs = boost::filesystem;
 
 int main (int argc, char *argv []) 
@@ -93,9 +97,7 @@ int main (int argc, char *argv [])
     }
 
     if (!bound) {
-        std::cerr << "Specify -b argument to bind the socket"
-                  << std::endl;
-        return 1;
+        socket.bind (DEFAULT_DSN);
     }
 
     if (!pipes.size ()) {
