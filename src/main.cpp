@@ -30,29 +30,30 @@
 
 #include "pipe.hpp"
 #include <iostream>
+#include <string>
+#include <sstream>
 #include <vector>
+#include <boost/filesystem.hpp>
+#include <exception>
+#include <stdexcept>
 #include <zmq.hpp>
+#include <limits.h>
 
-#ifndef BUFFER_SIZE
-#  define BUFFER_SIZE 4096
-#endif
-
-#define ALLOC_PIPES 20
+namespace fs = boost::filesystem;
 
 int main (int argc, char *argv []) 
 {
     // parse args
     bool bound = false;
     int c;
-    size_t p = 0;
 
-    zerolog::pipe_t *pipes[ALLOC_PIPES];
+    std::vector<zerolog::pipe_t *> pipes;
 
     zmq::context_t context (1);
     zmq::socket_t socket (context, ZMQ_PUB);
 
     opterr = 0;
-    while ((c = getopt(argc, argv, "b:hp:")) != -1) {
+    while ((c = getopt(argc, argv, "b:d:hp:")) != -1) {
         switch (c) {
 
             case 'b':
@@ -60,13 +61,33 @@ int main (int argc, char *argv [])
                 bound = true;
                 break;
 
+            case 'd':
+            {
+                // Iterate files in directory and find pipes
+                fs::path p (optarg);
+
+                try {
+                    fs::directory_iterator dir_end;
+
+                    for (fs::directory_iterator it (p); it != dir_end; ++it) {
+                        std::string name;
+                        std::stringstream ss;
+                        ss << *it;
+                        ss >> name;
+
+                        if (fs::is_other (*it) && zerolog::pipe_t::is_pipe (name)) {
+                            pipes.push_back (new zerolog::pipe_t (name, 0755));
+                        }
+                    }
+                } catch (const fs::filesystem_error& e) {
+                    std::cerr << "Error: " << e.what () << std::endl;
+                }
+            }
+                break;
+
             case 'p':
                 std::string a = optarg;
-                if (p >= ALLOC_PIPES) {
-                    std::cerr << "Maximum number of pipes reached. Will fix this one day" << std::endl;
-                    return 1;
-                }
-                pipes[p++] = new zerolog::pipe_t (a, 0755);
+                pipes.push_back (new zerolog::pipe_t (a, 0755));
                 break;
         }
     }
@@ -77,15 +98,15 @@ int main (int argc, char *argv [])
         return 1;
     }
 
-    if (!p) {
-        std::cerr << "-p argument needs to be specified at least once"
+    if (!pipes.size ()) {
+        std::cerr << "Not listening on any pipes.. exiting.."
                   << std::endl;
         return 1;
     }
 
-    zmq::pollitem_t *items = new zmq::pollitem_t [p];
+    zmq::pollitem_t *items = new zmq::pollitem_t [pipes.size ()];
 
-    for (size_t i = 0; i < p; i++) {
+    for (size_t i = 0; i < pipes.size (); i++) {
         items [i].socket  = 0;
         items [i].fd      = pipes[i]->get_fd ();
         items [i].events  = ZMQ_POLLIN;
@@ -93,18 +114,18 @@ int main (int argc, char *argv [])
     }
 
     while (true) {
-        int rc = zmq::poll (&items [0], p, -1);
+        int rc = zmq::poll (&items [0], pipes.size (), -1);
         assert (rc >= 0);
 
-        for (size_t i = 0; i < p; i++) {
+        for (size_t i = 0; i < pipes.size (); i++) {
             if (items [i].revents & ZMQ_POLLIN) {
-                size_t buffer_size = BUFFER_SIZE;
-                unsigned char buffer [BUFFER_SIZE];
+                size_t buffer_size = PIPE_BUF;
+                unsigned char buffer [PIPE_BUF];
 
                 if (pipes [i]->read (buffer, &buffer_size)) {
                     const char *filename = pipes [i]->get_filename ();
 
-                    zmq::message_t msg (buffer_size + 1 + strlen (filename));
+                    zmq::message_t msg (strlen (filename) + 1 + buffer_size);
 
                     memcpy ((char *) msg.data (), filename, strlen (filename));
                     memcpy ((char *) msg.data () + strlen (filename), "|", 1);
@@ -114,12 +135,13 @@ int main (int argc, char *argv [])
                 }
             }
             if (items [i].revents & ZMQ_POLLERR) {
-                std::cerr << "Error: " << zmq_strerror (errno) << std::endl;
+                std::cerr << "Error polling " << pipes [i]->get_filename () << ": "
+                          << zmq_strerror (errno) << std::endl;
             }
         }
     }
-    for (size_t i = 0; i < p; i++) {
-        delete pipes[p];
+    for (size_t i = 0; i < pipes.size (); i++) {
+        delete pipes [i];
     }
     delete[] items;
     return 0;

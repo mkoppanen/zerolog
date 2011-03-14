@@ -82,3 +82,12 @@ zerolog::pipe_t::~pipe_t ()
 {
     close (this->fd);
 }
+
+bool zerolog::pipe_t::is_pipe (const std::string &filename)
+{
+    struct stat st_buf;
+    if (stat (filename.c_str (), &st_buf) == -1) {
+        return false;
+    }
+    return S_ISFIFO(st_buf.st_mode);
+}

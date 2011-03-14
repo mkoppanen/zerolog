@@ -52,6 +52,9 @@ namespace zerolog {
 
             const char *get_filename ();
 
+            // this doesn't really belong here
+            static bool is_pipe (const std::string &filename);
+
             ~pipe_t ();
     };
 
